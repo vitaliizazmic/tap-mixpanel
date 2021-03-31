@@ -4,7 +4,7 @@ import json
 import pytz
 import singer
 from singer import metrics, metadata, Transformer, utils
-from singer.utils import strptime_to_utc
+from singer.utils import strptime_to_utc, strftime
 from tap_mixpanel.transform import transform_record
 from tap_mixpanel.streams import STREAMS
 
@@ -467,6 +467,20 @@ def update_currently_syncing(state, stream_name):
     singer.write_state(state)
 
 
+# Some streams has date range limits.
+# Date range is set in days
+def apply_date_range_limit(stream_name: str, start_date: str, date_range: int) -> str:
+    custom_start_date = strptime_to_utc(start_date)
+    now_dttm = utils.now()
+    delta_days = (now_dttm - custom_start_date).days
+    if delta_days >= date_range:
+        delta_days = date_range
+        custom_start_date = strftime(now_dttm - timedelta(days=delta_days))
+        LOGGER.warning(f"WARNING: start_date greater than {date_range} days maximum for {stream_name} stream.")
+        LOGGER.warning(f"WARNING: Setting start_date to {date_range} days ago, {start_date}")
+    return custom_start_date
+
+
 def sync(client, config, catalog, state, start_date):
     # Get selected_streams from catalog, based on state last_stream
     #   last_stream = Previous currently synced stream, if the load was interrupted
@@ -483,6 +497,7 @@ def sync(client, config, catalog, state, start_date):
     # Loop through selected_streams
     for stream_name in selected_streams:
         LOGGER.info('START Syncing: {}'.format(stream_name))
+        stream_start_date = apply_date_range_limit(stream_name, start_date, 90) if stream_name == "annotations" else start_date
         update_currently_syncing(state, stream_name)
         endpoint_config = STREAMS[stream_name]
         path = endpoint_config.get('path', stream_name)
@@ -491,7 +506,7 @@ def sync(client, config, catalog, state, start_date):
             client=client,
             catalog=catalog,
             state=state,
-            start_date=start_date,
+            start_date=stream_start_date,
             stream_name=stream_name,
             path=path,
             endpoint_config=endpoint_config,
