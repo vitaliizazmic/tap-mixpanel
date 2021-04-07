@@ -473,12 +473,13 @@ def apply_date_range_limit(stream_name: str, start_date: str, date_range: int) -
     custom_start_date = strptime_to_utc(start_date)
     now_dttm = utils.now()
     delta_days = (now_dttm - custom_start_date).days
-    if delta_days >= date_range:
+    if delta_days > date_range:
         delta_days = date_range
         custom_start_date = strftime(now_dttm - timedelta(days=delta_days))
         LOGGER.warning(f"WARNING: start_date greater than {date_range} days maximum for {stream_name} stream.")
         LOGGER.warning(f"WARNING: Setting start_date to {date_range} days ago, {start_date}")
-    return custom_start_date
+        return custom_start_date
+    return start_date
 
 
 def sync(client, config, catalog, state, start_date):
